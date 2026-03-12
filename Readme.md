@@ -1,1 +1,1 @@
-### Yoo
+This project is a Telegram-controlled AI Sales Agent that automatically captures leads from website forms, researches and scores them using AI, and notifies sales reps via Telegram for quick approval. Once approved, the agent handles personalized outreach and follow-ups across messaging and email, ensuring businesses respond instantly and never lose potential customers.
