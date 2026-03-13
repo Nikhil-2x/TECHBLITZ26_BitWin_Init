@@ -42,13 +42,47 @@ export async function qualify(
 export async function writeEmail(
   research: string,
   qualification: QualificationSchema,
+  lead: { name: string; company: string; email: string; message: string }
 ) {
   const { text } = await generateText({
-    // model: "openai/gpt-5",
     model: groq("llama-3.1-8b-instant"),
-    prompt: `Write an email for a ${
-      qualification.category
-    } lead based on the following information: ${JSON.stringify(research)}`,
+    prompt: `Write a personalized email for a ${qualification.category} lead based on the following information:
+
+Company: BitWin Init - We provide expert tech consulting services, helping businesses leverage technology for growth and innovation.
+
+Lead Details:
+- Name: ${lead.name}
+- Company: ${lead.company || 'their company'}
+- Email: ${lead.email}
+- Message: ${lead.message}
+
+Research: ${research}
+
+Email Structure:
+Subject: Update on Tech Consulting Services and Digital Transformation
+
+Dear ${lead.name},
+
+[Personalized introduction based on their message and research, focusing on tech consulting]
+
+[Briefly mention BitWin Init's expertise in tech consulting]
+
+[Share 2-3 specific achievements or case studies related to tech consulting]
+
+[Mention how our services can help their business with technology]
+
+[Call to action - suggest scheduling a consultation call]
+
+[Closing with sender information]
+
+Best regards,
+
+Aryan
+CEO
+BitWin Init
++91 9839391871
+
+Requirements: Keep it professional, personalized, under 300 words, reference something specific from their message or research, focus on tech consulting and digital transformation services.`,
   });
 
   return text;
@@ -75,11 +109,12 @@ export async function generateOutreachMessage(
     // model: "openai/gpt-5",
     model: groq("llama-3.1-8b-instant"),
     prompt:
-      `Write a short, personalized outreach message for a ${qualification.category} lead.\n\n` +
+      `Write a short, personalized follow-up message for a ${qualification.category} lead.\n\n` +
+      `Company: BitWin Init - Expert tech consulting services for digital transformation.\n` +
       `Lead: ${JSON.stringify({ name: lead.name, company: lead.company, email: lead.email })}\n` +
       `Research: ${research.slice(0, 500)}\n` +
       `Follow-up context: ${context}\n\n` +
-      `Requirements: under 150 words, conversational, reference something specific from research, clear CTA.`,
+      `Requirements: Focus on tech consulting services, under 150 words, conversational, reference something specific from research, clear CTA for consultation call.`,
   });
 
   return text;
@@ -88,10 +123,26 @@ export async function generateOutreachMessage(
 /**
  * Send an email
  */
-export async function sendEmail(email: string) {
-  /**
-   * send email using provider like sendgrid, mailgun, resend etc.
-   */
+export async function sendEmail(to: string, subject: string, html: string) {
+  const { Resend } = await import('resend');
+  const resend = new Resend(process.env.RESEND_API_KEY);
+
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error('RESEND_API_KEY not configured');
+  }
+
+  const { data, error } = await resend.emails.send({
+    from: process.env.FROM_EMAIL || 'noreply@yourdomain.com',
+    to: [to],
+    subject,
+    html,
+  });
+
+  if (error) {
+    throw new Error(`Email send failed: ${error.message}`);
+  }
+
+  return data;
 }
 
 /**

@@ -107,13 +107,13 @@ export async function handleApprove(leadId: string): Promise<void> {
   try {
     [outreachMessage, emailDraft] = await Promise.all([
       generateOutreachMessage(lead.research, lead.qualification, lead, 1),
-      writeEmail(lead.research, lead.qualification)
+      writeEmail(lead.research, lead.qualification, lead)
     ]);
   } catch {
     outreachMessage =
       `Hi ${lead.name},\n\nI came across ${lead.company || 'your work'} and wanted to reach out. I think there's a great opportunity for us to work together.\n\nWould you be open to a quick 15-minute call this week?\n\nBest regards`;
     emailDraft =
-      `Subject: Quick question about ${lead.company || 'your business'}\n\nHi ${lead.name},\n\nI noticed your message and wanted to personally follow up. We've helped businesses like yours and I'd love to show you what we can do.\n\nCan we schedule a brief call?\n\nBest,\n[Your Name]`;
+      `Subject: Update on Tech Consulting Services and Digital Transformation\n\nDear ${lead.name},\n\nI hope this email finds you well. It's been a while since we last spoke, and I wanted to follow up on our previous conversation regarding technology consulting services. At BitWin Init, our team specializes in helping businesses leverage technology for growth and innovation.\n\nAs a reminder, we provide expert tech consulting services tailored to your business needs. We've been working diligently on various projects, exploring the latest technologies and their applications.\n\nIn recent weeks, we've:\n\n- Successfully implemented digital transformation solutions for several clients\n- Developed comprehensive tech strategies for growing businesses\n- Partnered with industry leaders to deliver cutting-edge consulting services\n\nWe believe that our expertise in tech consulting can help ${lead.company || 'your company'} achieve its digital goals and stay ahead in today's competitive landscape. If you're interested in learning more about our services, we'd be happy to schedule a consultation call to discuss your specific needs.\n\nWould you like to schedule a call or meeting to explore how BitWin Init can support your technology initiatives?\n\nBest regards,\n\nAryan\nCEO\nBitWin Init\n+91 9839391871`;
   }
 
   const now = new Date();
@@ -121,34 +121,30 @@ export async function handleApprove(leadId: string): Promise<void> {
   const day5 = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
 
   updateLead(leadId, {
-    status: 'contacted',
+    status: 'approved',
     outreach_email: emailDraft,
     outreach_message: outreachMessage,
     follow_up_day2_at: day2.toISOString(),
     follow_up_day5_at: day5.toISOString(),
-    follow_ups_sent: 1
+    follow_ups_sent: 0  // Changed from 1 since we're not sending yet
   });
 
+  // Show email draft with send button
   await bot.telegram.sendMessage(
     CHAT_ID,
-    `📱 <b>Suggested Outreach Message:</b>\n\n${esc(outreachMessage)}`,
-    { parse_mode: 'HTML' }
-  );
-
-  await bot.telegram.sendMessage(
-    CHAT_ID,
-    `📧 <b>Email Draft:</b>\n\n${esc(emailDraft.slice(0, 900))}${emailDraft.length > 900 ? '...' : ''}`,
-    { parse_mode: 'HTML' }
-  );
-
-  await bot.telegram.sendMessage(
-    CHAT_ID,
-    `📅 <b>Follow-up Schedule Set:</b>\n` +
-      `• Day 0: Initial outreach ✅\n` +
-      `• Day 2: Follow-up → ${day2.toLocaleDateString()}\n` +
-      `• Day 5: Final attempt → ${day5.toLocaleDateString()}\n\n` +
-      `Use /pipeline to monitor progress.`,
-    { parse_mode: 'HTML' }
+    `📧 <b>Email Draft for ${esc(lead.name)}</b>\n\n` +
+    `<b>To:</b> ${esc(lead.email)}\n\n` +
+    `<b>Subject:</b> ${esc(emailDraft.split('\n')[0].replace('Subject: ', ''))}\n\n` +
+    `<b>Body:</b>\n${esc(emailDraft.split('\n').slice(1).join('\n'))}`,
+    {
+      parse_mode: 'HTML',
+      reply_markup: Markup.inlineKeyboard([
+        [
+          Markup.button.callback('📤 Send Email', `send_email_${lead.lead_id}`),
+          Markup.button.callback('❌ Cancel', `cancel_email_${lead.lead_id}`)
+        ]
+      ]).reply_markup
+    }
   );
 }
 
@@ -170,6 +166,86 @@ export async function handleReject(leadId: string): Promise<void> {
   await bot.telegram.sendMessage(
     CHAT_ID,
     `❌ <b>Lead Rejected</b>\n\n👤 <b>${esc(lead.name)}</b> from <b>${esc(lead.company || 'N/A')}</b> has been marked as rejected.\n\nUse /pipeline to see full pipeline status.`,
+    { parse_mode: 'HTML' }
+  );
+}
+
+export async function handleSendEmail(leadId: string): Promise<void> {
+  if (!bot || !CHAT_ID) return;
+
+  const lead = getLead(leadId);
+  if (!lead) {
+    await bot.telegram.sendMessage(CHAT_ID, `⚠️ Lead <code>${leadId}</code> not found.`, { parse_mode: 'HTML' });
+    return;
+  }
+
+  if (!lead.outreach_email) {
+    await bot.telegram.sendMessage(CHAT_ID, `⚠️ No email draft found for lead <code>${leadId}</code>.`, { parse_mode: 'HTML' });
+    return;
+  }
+
+  try {
+    // Parse the email draft - assuming format "Subject: ...\n\nBody..."
+    const lines = lead.outreach_email.split('\n');
+    const subject = lines[0].replace('Subject: ', '');
+    const body = lines.slice(2).join('\n');
+
+    // Convert plain text to HTML
+    const htmlBody = body.replace(/\n/g, '<br>');
+
+    const { sendEmail } = await import('./services');
+    await sendEmail(lead.email, subject, htmlBody);
+
+    // Update lead status
+    const now = new Date();
+    const day2 = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
+    const day5 = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
+
+    updateLead(leadId, {
+      status: 'contacted',
+      follow_up_day2_at: day2.toISOString(),
+      follow_up_day5_at: day5.toISOString(),
+      follow_ups_sent: 1
+    });
+
+    await bot.telegram.sendMessage(
+      CHAT_ID,
+      `✅ <b>Email Sent Successfully!</b>\n\n` +
+      `👤 <b>To:</b> ${esc(lead.name)} (${esc(lead.email)})\n` +
+      `📧 <b>Subject:</b> ${esc(subject)}\n\n` +
+      `📅 <b>Follow-up Schedule Set:</b>\n` +
+      `• Day 0: Initial outreach ✅\n` +
+      `• Day 2: Follow-up → ${day2.toLocaleDateString()}\n` +
+      `• Day 5: Final attempt → ${day5.toLocaleDateString()}`,
+      { parse_mode: 'HTML' }
+    );
+  } catch (error) {
+    console.error('Email send error:', error);
+    await bot.telegram.sendMessage(
+      CHAT_ID,
+      `❌ <b>Email Send Failed</b>\n\n` +
+      `Could not send email to ${esc(lead.email)}. Please check your Resend configuration.\n\n` +
+      `Error: ${error instanceof Error ? esc(error.message) : 'Unknown error'}`,
+      { parse_mode: 'HTML' }
+    );
+  }
+}
+
+export async function handleCancelEmail(leadId: string): Promise<void> {
+  if (!bot || !CHAT_ID) return;
+
+  const lead = getLead(leadId);
+  if (!lead) {
+    await bot.telegram.sendMessage(CHAT_ID, `⚠️ Lead <code>${leadId}</code> not found.`, { parse_mode: 'HTML' });
+    return;
+  }
+
+  updateLead(leadId, { status: 'pending' }); // Reset to pending
+
+  await bot.telegram.sendMessage(
+    CHAT_ID,
+    `❌ <b>Email Cancelled</b>\n\n` +
+    `Email to ${esc(lead.name)} was not sent. Lead status reset to pending.`,
     { parse_mode: 'HTML' }
   );
 }
@@ -259,5 +335,21 @@ if (bot) {
     try { await ctx.answerCbQuery('❌ Rejecting lead...'); } catch {}
     try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
     await handleReject(leadId);
+  });
+
+  /** Inline keyboard — Send Email button */
+  bot.action(/^send_email_(.+)$/, async ctx => {
+    const leadId = ctx.match[1];
+    try { await ctx.answerCbQuery('📤 Sending email...'); } catch {}
+    try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
+    await handleSendEmail(leadId);
+  });
+
+  /** Inline keyboard — Cancel Email button */
+  bot.action(/^cancel_email_(.+)$/, async ctx => {
+    const leadId = ctx.match[1];
+    try { await ctx.answerCbQuery('❌ Cancelled'); } catch {}
+    try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
+    await handleCancelEmail(leadId);
   });
 }

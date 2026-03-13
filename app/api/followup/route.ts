@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { getDueFollowUps, updateLead } from '@/lib/pipeline';
-import { generateOutreachMessage } from '@/lib/services';
+import { generateOutreachMessage, sendEmail } from '@/lib/services';
 import { bot, CHAT_ID } from '@/lib/telegram';
 
 function esc(text: string): string {
@@ -14,8 +14,9 @@ function esc(text: string): string {
  * POST /api/followup
  *
  * Checks the pipeline for leads that have passed their Day 2 or Day 5
- * follow-up window and sends the rep a suggested follow-up message via
- * Telegram. Trigger this endpoint from a cron job or manually.
+ * follow-up window and sends follow-up emails to leads. Also notifies
+ * the admin via Telegram with confirmation.
+ * Trigger this endpoint from a cron job or manually.
  */
 export async function POST(_request: NextRequest) {
   const dueLeads = getDueFollowUps();
@@ -38,23 +39,50 @@ export async function POST(_request: NextRequest) {
       followUpNumber
     );
 
-    if (bot && CHAT_ID) {
-      await bot.telegram.sendMessage(
-        CHAT_ID,
-        `🔔 <b>${label}</b>\n\n` +
-          `Lead: <b>${esc(lead.name)}</b> (${esc(lead.company || 'N/A')})\n` +
-          `Email: ${esc(lead.email)}\n\n` +
-          `📱 <b>Suggested Message:</b>\n${esc(message)}`,
-        { parse_mode: 'HTML' }
-      );
-    }
+    try {
+      // Send email to the lead
+      const subject = followUpNumber === 2
+        ? `Following up on Tech Consulting Services - ${lead.company || 'your inquiry'}`
+        : `Final follow-up on Digital Transformation Solutions - ${lead.company || 'your inquiry'}`;
 
-    updateLead(lead.lead_id, { follow_ups_sent: followUpNumber });
-    sent++;
+      const htmlMessage = message.replace(/\n/g, '<br>');
+
+      await sendEmail(lead.email, subject, htmlMessage);
+
+      updateLead(lead.lead_id, { follow_ups_sent: followUpNumber });
+      sent++;
+
+      // Notify admin via Telegram
+      if (bot && CHAT_ID) {
+        await bot.telegram.sendMessage(
+          CHAT_ID,
+          `📧 <b>${label} Email Sent</b>\n\n` +
+            `👤 <b>${esc(lead.name)}</b> (${esc(lead.company || 'N/A')})\n` +
+            `📧 <b>Email:</b> ${esc(lead.email)}\n` +
+            `📝 <b>Subject:</b> ${esc(subject)}\n\n` +
+            `✅ <b>Email sent successfully</b>`,
+          { parse_mode: 'HTML' }
+        );
+      }
+    } catch (error) {
+      console.error(`Failed to send follow-up email to ${lead.email}:`, error);
+
+      // Notify admin of failure
+      if (bot && CHAT_ID) {
+        await bot.telegram.sendMessage(
+          CHAT_ID,
+          `❌ <b>${label} Email Failed</b>\n\n` +
+            `👤 <b>${esc(lead.name)}</b> (${esc(lead.email)})\n` +
+            `❌ <b>Error:</b> ${error instanceof Error ? esc(error.message) : 'Unknown error'}\n\n` +
+            `Please check your email configuration.`,
+          { parse_mode: 'HTML' }
+        );
+      }
+    }
   }
 
   return Response.json({
-    message: `Sent ${sent} follow-up(s).`,
+    message: `Sent ${sent} follow-up email(s).`,
     count: sent
   });
 }
