@@ -75,7 +75,6 @@ export function getPipelineSummary() {
     rejected: rejected.length,
     pending: pending.length,
     contacted: leads.filter((l) => l.status === "contacted").length,
-    estimatedRevenue: approved.length * 5000,
   };
 }
 

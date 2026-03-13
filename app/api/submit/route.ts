@@ -3,6 +3,7 @@ import { checkBotId } from 'botid/server';
 import { saveLead } from '@/lib/pipeline';
 import { bot, CHAT_ID } from '@/lib/telegram';
 import { randomUUID } from 'crypto';
+import { qualify, researchAgent } from '@/lib/services';
 
 function esc(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -26,27 +27,56 @@ export async function POST(request: Request) {
   const leadId = randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase();
   const now = new Date().toISOString();
 
-  // Save lead immediately to pipeline with pending status
+  // Run AI research synchronously
+  let research = 'Research failed - please check AI configuration';
+  let qualification = { category: 'FOLLOW_UP' as const, reason: 'AI research failed', score: 5 };
+
+  try {
+    if (process.env.GROQ_API_KEY && process.env.EXA_API_KEY) {
+      // Run research
+      const researchResult = await researchAgent.generate({
+        prompt: `Provide a complete research summary in ONE PARAGRAPH (maximum 15 lines) about the lead's company and background: ${JSON.stringify(data)}. Include key facts about their industry, company size, notable achievements, and any relevant business information. Make it comprehensive but concise, flowing as one cohesive paragraph.`,
+      });
+      research = researchResult.text;
+
+      // Run qualification
+      qualification = await qualify(data, research);
+    } else {
+      console.warn('⚠️ AI keys not configured - using fallback qualification');
+    }
+  } catch (error) {
+    console.error('AI research/qualification failed:', error);
+  }
+
+  // Save lead with research and score
   const lead: LeadRecord = {
     lead_id: leadId,
     name: data.name,
     email: data.email,
     company: data.company ?? '',
     message: data.message,
-    score: 0,
+    score: qualification.score,
     status: 'pending',
-    qualification: { category: 'FOLLOW_UP', reason: 'Awaiting AI analysis...', score: 0 },
-    research: 'AI research in progress...',
+    qualification,
+    research,
     created_at: now,
     updated_at: now,
     follow_ups_sent: 0
   };
   saveLead(lead);
 
-  // Send Telegram notification IMMEDIATELY — no AI dependency
+  // Send Telegram notification with research and score
   if (bot && CHAT_ID) {
     try {
       const { Markup } = await import('telegraf');
+      const stars = '⭐'.repeat(Math.max(1, Math.round(qualification.score / 2)));
+      const categoryEmoji =
+        qualification.category === 'QUALIFIED'
+          ? '✅'
+          : qualification.category === 'FOLLOW_UP'
+            ? '🔄'
+            : '🟡';
+
       await bot.telegram.sendMessage(
         CHAT_ID,
         `🚀 <b>New Lead Received!</b>\n\n` +
@@ -54,7 +84,10 @@ export async function POST(request: Request) {
           `🏢 <b>Company:</b> ${esc(data.company || 'N/A')}\n` +
           `📧 <b>Email:</b> ${esc(data.email)}\n` +
           `📝 <b>Message:</b> ${esc(data.message.slice(0, 300))}\n\n` +
-          `⏳ <i>AI research is running in background. Lead score will be updated shortly.</i>\n\n` +
+          `${categoryEmoji} <b>Category:</b> ${qualification.category}\n` +
+          `📊 <b>Score:</b> ${qualification.score}/10 ${stars}\n` +
+          `💡 <b>Reason:</b> ${esc(qualification.reason)}\n\n` +
+          `🔍 <b>Research Summary:</b>\n${esc(research)}\n\n` +
           `🆔 <b>Lead ID:</b> <code>${leadId}</code>`,
         {
           parse_mode: 'HTML',
@@ -71,18 +104,6 @@ export async function POST(request: Request) {
     }
   } else {
     console.warn('⚠️ Telegram not configured — skipping notification');
-  }
-
-  // Fire AI research workflow in background (non-blocking)
-  // Only runs if workflow API keys are configured
-  if (process.env.AI_GATEWAY_API_KEY && process.env.EXA_API_KEY) {
-    import('workflow/api').then(({ start }) =>
-      import('@/workflows/inbound').then(({ workflowInbound }) =>
-        start(workflowInbound, [data, leadId]).catch((err: unknown) =>
-          console.error('Workflow error:', err)
-        )
-      )
-    ).catch((err: unknown) => console.error('Workflow import error:', err));
   }
 
   return Response.json(

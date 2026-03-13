@@ -109,12 +109,11 @@ export async function generateOutreachMessage(
     // model: "openai/gpt-5",
     model: groq("llama-3.1-8b-instant"),
     prompt:
-      `Write a short, personalized follow-up message for a ${qualification.category} lead.\n\n` +
-      `Company: BitWin Init - Expert tech consulting services for digital transformation.\n` +
+      `Write a short, personalized outreach message for a ${qualification.category} lead.\n\n` +
       `Lead: ${JSON.stringify({ name: lead.name, company: lead.company, email: lead.email })}\n` +
       `Research: ${research.slice(0, 500)}\n` +
       `Follow-up context: ${context}\n\n` +
-      `Requirements: Focus on tech consulting services, under 150 words, conversational, reference something specific from research, clear CTA for consultation call.`,
+      `Requirements: under 150 words, conversational, reference something specific from research, clear CTA.`,
   });
 
   return text;

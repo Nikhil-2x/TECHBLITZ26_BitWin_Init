@@ -57,7 +57,7 @@ export async function sendLeadNotification(lead: LeadRecord): Promise<void> {
     `${categoryEmoji} <b>Category:</b> ${lead.qualification.category}\n` +
     `📊 <b>Score:</b> ${lead.score}/10 ${stars}\n` +
     `💡 <b>Reason:</b> ${esc(lead.qualification.reason)}\n\n` +
-    `🔍 <b>Research Summary:</b>\n${esc(lead.research.slice(0, 600))}...\n\n` +
+    `🔍 <b>Research Summary:</b>\n${esc(lead.research)}\n\n` +
     `🆔 <b>Lead ID:</b> <code>${lead.lead_id}</code>`;
 
   await bot.telegram.sendMessage(CHAT_ID, message, {
@@ -271,8 +271,7 @@ export async function sendPipelineSummary(
       `✅ <b>Approved:</b> ${s.approved}\n` +
       `❌ <b>Rejected:</b> ${s.rejected}\n` +
       `⏳ <b>Pending:</b> ${s.pending}\n` +
-      `📞 <b>Contacted:</b> ${s.contacted}\n\n` +
-      `💰 <b>Est. Revenue:</b> $${s.estimatedRevenue.toLocaleString()}`,
+      `📞 <b>Contacted:</b> ${s.contacted}`,
     { parse_mode: 'HTML' }
   );
 }

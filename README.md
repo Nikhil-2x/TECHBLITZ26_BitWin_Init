@@ -13,9 +13,9 @@ A sophisticated AI-powered lead generation and management platform built for Bit
 
 ### Lead Processing Flow
 1. **Form Submission** → Lead captured via web form
-2. **AI Research** → Background research on company and lead
+2. **AI Research** → Company research and intelligence gathering
 3. **Qualification** → Scoring and categorization (QUALIFIED/FOLLOW_UP/REJECTED)
-4. **Approval Workflow** → Telegram notifications with approve/reject buttons
+4. **Approval Workflow** → Telegram notifications with research, score, and approve/reject buttons
 5. **Email Outreach** → Personalized emails sent to leads with confirmation
 6. **Follow-ups** → Automated Day 2 and Day 5 follow-up emails
 
@@ -176,13 +176,15 @@ Telegram webhook endpoint for bot interactions.
 ### Data Flow
 
 1. **Form Submission** → `submit/route.ts`
-2. **AI Research** → Workflow engine processes lead
-3. **Qualification** → AI scores and categorizes lead
-4. **Telegram Notification** → Admin receives approval request
-5. **Email Generation** → AI creates personalized content
-6. **Confirmation** → Admin reviews and confirms sending
-7. **Email Delivery** → Resend sends to lead
-8. **Follow-ups** → Automated email sequences
+2. **AI Research** → Synchronous research using Exa.ai and Groq
+3. **Qualification** → AI scoring and categorization
+4. **Pipeline Save** → Lead saved with research and score
+5. **Telegram Notification** → Admin receives detailed notification with research and score
+6. **Approval/Rejection** → Admin reviews and decides via Telegram buttons
+7. **Email Generation** → AI creates personalized content
+8. **Confirmation** → Admin reviews email draft and confirms sending
+9. **Email Delivery** → Resend sends to lead
+10. **Follow-ups** → Automated email sequences
 
 ## 🔧 Configuration
 
