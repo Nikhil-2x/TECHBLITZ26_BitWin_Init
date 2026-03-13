@@ -31,7 +31,8 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env*
+.env.local
+.env
 
 # vercel
 .vercel
@@ -39,3 +40,18 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# generated
+.well-known*
+
+# misc
+.swc
+
+# env files
+.env*.local
+
+# local sales data
+/data/pipeline.json
+
+# local notes
+project_structure_and_telegram_integration.txt

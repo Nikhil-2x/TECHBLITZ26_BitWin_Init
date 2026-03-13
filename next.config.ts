@@ -1,7 +1,9 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
+import { withBotId } from 'botid/next/config';
+import { withWorkflow } from 'workflow/next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  serverExternalPackages: ['telegraf']
 };
 
-export default nextConfig;
+export default withWorkflow(withBotId(nextConfig));
